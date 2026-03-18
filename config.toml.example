@@ -1,0 +1,8 @@
+[proxmox]
+# LAN IP or Tailscale IP/hostname (works from anywhere on Tailscale)
+host = "192.168.1.100"        # or "100.x.x.x" / "pve.tail-xxx.ts.net"
+user = "root@pam"
+token_name = "tui"
+token_value = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+verify_ssl = false
+node = "pve"
