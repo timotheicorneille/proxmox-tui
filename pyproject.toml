@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "proxmox-tui"
-version = "0.1.0"
+dynamic = ["version"]
 requires-python = ">=3.11"
 dependencies = [
     "textual>=0.70.0",
@@ -18,3 +18,5 @@ proxmox-tui = "proxmox_tui.main:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["proxmox_tui*"]
+
+[tool.setuptools_scm]
