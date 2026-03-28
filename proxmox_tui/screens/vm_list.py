@@ -10,6 +10,7 @@ from textual import work
 from .. import api
 from ..utils import STATUS_STYLE, format_uptime
 from .confirm_delete import ConfirmDeleteScreen
+from .edit_vm import EditVMScreen
 from .provision import ProvisionScreen
 
 
@@ -62,6 +63,7 @@ class VMListScreen(Screen):
         Binding("r", "reboot_vm", "Reboot"),
         Binding("d", "delete_vm", "Delete"),
         Binding("n", "new_vm", "New VM"),
+        Binding("e", "edit_vm", "Edit VM"),
         Binding("R", "refresh", "Refresh"),
         Binding("q", "quit", "Quit"),
     ]
@@ -230,6 +232,31 @@ class VMListScreen(Screen):
         try:
             api.delete_vm(vmid)
             self.app.call_from_thread(self._set_status, f"[green]VM {vmid} deleted[/]")
+        except Exception as e:
+            self.app.call_from_thread(self._set_status, f"[red]Error: {e}[/]")
+        self.app.call_from_thread(self.load_vms)
+
+    def action_edit_vm(self) -> None:
+        vm = self._selected_vm()
+        if vm is None:
+            return
+
+        def on_result(changes: dict) -> None:
+            if changes:
+                self._do_edit(int(vm["vmid"]), changes)
+
+        self.app.push_screen(EditVMScreen(int(vm["vmid"]), vm.get("name", "")), on_result)
+
+    @work(thread=True)
+    def _do_edit(self, vmid: int, changes: dict) -> None:
+        try:
+            api.update_vm(
+                vmid,
+                cores=changes.get("cores", 0),
+                memory=changes.get("memory", 0),
+                disk_size=changes.get("disk_size", ""),
+            )
+            self.app.call_from_thread(self._set_status, "[green]VM updated[/]")
         except Exception as e:
             self.app.call_from_thread(self._set_status, f"[red]Error: {e}[/]")
         self.app.call_from_thread(self.load_vms)

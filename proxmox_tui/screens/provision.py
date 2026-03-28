@@ -24,11 +24,31 @@ class ProvisionScreen(Screen):
     #form {
         border: round $accent;
         padding: 2 4;
-        width: 60;
+        width: 64;
         height: auto;
     }
-    #form Label {
+    .section {
+        color: $accent;
+        text-style: bold;
         margin-top: 1;
+        margin-bottom: 0;
+    }
+    .row {
+        layout: horizontal;
+        height: auto;
+    }
+    .row Input {
+        margin-right: 1;
+    }
+    .row Input:last-of-type {
+        margin-right: 0;
+    }
+    .field {
+        height: auto;
+    }
+    .field Label {
+        margin-top: 1;
+        margin-bottom: 0;
     }
     #buttons {
         layout: horizontal;
@@ -46,19 +66,42 @@ class ProvisionScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
         with Vertical(id="form"):
-            yield Static("[bold]Provision new VM[/]\n")
-            yield Label("Template")
+            yield Static("[bold]Provision new VM[/]")
+
+            yield Static("── Identity ──────────────────────────── required ─", classes="section")
+            yield Label("Template *")
             yield Select([], id="template-select", prompt="Loading templates…")
-            yield Label("VM ID")
-            yield Input(placeholder="e.g. 104", id="vmid")
-            yield Label("Name")
-            yield Input(placeholder="e.g. vm-foo", id="name")
-            yield Label("IP (CIDR)")
-            yield Input(placeholder="e.g. 192.168.1.104/24", id="ip")
-            yield Label("Gateway")
-            yield Input(placeholder="e.g. 192.168.1.1", id="gateway")
-            yield Label("DNS (optional)")
-            yield Input(placeholder="e.g. 1.1.1.1", id="dns")
+            with Horizontal(classes="row"):
+                with Vertical(classes="field"):
+                    yield Label("VM ID *")
+                    yield Input(placeholder="e.g. 104", id="vmid")
+                with Vertical(classes="field"):
+                    yield Label("Name *")
+                    yield Input(placeholder="e.g. vm-foo", id="name")
+
+            yield Static("── Network ───────────────────────────── required ─", classes="section")
+            with Horizontal(classes="row"):
+                with Vertical(classes="field"):
+                    yield Label("IP / CIDR *")
+                    yield Input(placeholder="192.168.1.104/24", id="ip")
+                with Vertical(classes="field"):
+                    yield Label("Gateway *")
+                    yield Input(placeholder="192.168.1.1", id="gateway")
+            yield Label("DNS")
+            yield Input(placeholder="1.1.1.1  (optional)", id="dns")
+
+            yield Static("── Hardware ──────────────────────────── optional ─", classes="section")
+            with Horizontal(classes="row"):
+                with Vertical(classes="field"):
+                    yield Label("vCPU")
+                    yield Input(placeholder="e.g. 2", id="cores")
+                with Vertical(classes="field"):
+                    yield Label("Memory (MB)")
+                    yield Input(placeholder="e.g. 2048", id="memory")
+                with Vertical(classes="field"):
+                    yield Label("Disk (GB)")
+                    yield Input(placeholder="e.g. 20", id="disk-size")
+
             with Horizontal(id="buttons"):
                 yield Button("Create", variant="success", id="btn-create")
                 yield Button("Cancel", variant="default", id="btn-cancel")
@@ -105,6 +148,9 @@ class ProvisionScreen(Screen):
         ip = self.query_one("#ip", Input).value.strip()
         gateway = self.query_one("#gateway", Input).value.strip()
         dns = self.query_one("#dns", Input).value.strip()
+        cores_str = self.query_one("#cores", Input).value.strip()
+        memory_str = self.query_one("#memory", Input).value.strip()
+        disk_size_str = self.query_one("#disk-size", Input).value.strip()
 
         if sel.value is Select.BLANK:
             self._set_status("[red]Select a template[/]")
@@ -121,8 +167,23 @@ class ProvisionScreen(Screen):
         if not gateway:
             self._set_status("[red]Gateway is required[/]")
             return
+        if cores_str and not cores_str.isdigit():
+            self._set_status("[red]vCPU must be a number[/]")
+            return
+        if memory_str and not memory_str.isdigit():
+            self._set_status("[red]Memory must be a number (MB)[/]")
+            return
+        if disk_size_str and not disk_size_str.isdigit():
+            self._set_status("[red]Disk size must be a number (GB)[/]")
+            return
 
-        self._do_clone(int(sel.value), int(vmid_str), name, ip, gateway, dns)
+        disk_size = f"{disk_size_str}G" if disk_size_str else ""
+        self._do_clone(
+            int(sel.value), int(vmid_str), name, ip, gateway, dns,
+            disk_size=disk_size,
+            cores=int(cores_str) if cores_str else 0,
+            memory=int(memory_str) if memory_str else 0,
+        )
 
     @work(thread=True)
     def _do_clone(
@@ -133,10 +194,16 @@ class ProvisionScreen(Screen):
         ip: str,
         gateway: str,
         dns: str,
+        disk_size: str = "",
+        cores: int = 0,
+        memory: int = 0,
     ) -> None:
         self.app.call_from_thread(self._set_status, "[yellow]Cloning…[/]")
         try:
-            api.clone_vm(template_id, new_id, name, ip, gateway, dns, start=True)
+            api.clone_vm(
+                template_id, new_id, name, ip, gateway, dns,
+                disk_size=disk_size, cores=cores, memory=memory, start=True,
+            )
             self.app.call_from_thread(self._set_status, f"[green]VM {name} ({new_id}) created and starting![/]")
             time.sleep(1.5)
             self.app.call_from_thread(self.action_cancel)

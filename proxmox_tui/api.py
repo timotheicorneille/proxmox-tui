@@ -86,6 +86,55 @@ def next_vmid() -> int:
     return int(_api().cluster.nextid.get())
 
 
+_DISK_KEYS = ("scsi0", "virtio0", "sata0", "ide0", "scsi1", "virtio1", "sata1", "ide1")
+
+
+def _primary_disk(vmid: int) -> str | None:
+    """Return the first disk device name found in the VM config, or None."""
+    cfg = _api().nodes(_node).qemu(vmid).config.get()
+    for key in _DISK_KEYS:
+        if key in cfg:
+            return key
+    return None
+
+
+def get_vm_settings(vmid: int) -> dict:
+    """Return current cores, memory (MB), primary disk name and size."""
+    cfg = _api().nodes(_node).qemu(vmid).config.get()
+    disk_name = None
+    disk_size = "?"
+    for key in _DISK_KEYS:
+        if key not in cfg:
+            continue
+        for part in str(cfg[key]).split(","):
+            if part.startswith("size="):
+                disk_size = part[5:]
+        disk_name = key
+        break
+    return {
+        "cores": cfg.get("cores", 1),
+        "memory": cfg.get("memory", 512),
+        "disk": disk_name,
+        "disk_size": disk_size,
+    }
+
+
+def update_vm(vmid: int, cores: int = 0, memory: int = 0, disk_size: str = "") -> None:
+    """Update cores, memory and/or disk size of an existing VM."""
+    params: dict = {}
+    if cores:
+        params["cores"] = cores
+    if memory:
+        params["memory"] = memory
+    if params:
+        _api().nodes(_node).qemu(vmid).config.post(**params)
+    if disk_size:
+        disk = _primary_disk(vmid)
+        if disk is None:
+            raise RuntimeError(f"No disk found on VM {vmid}")
+        _api().nodes(_node).qemu(vmid).resize.put(disk=disk, size=disk_size)
+
+
 def clone_vm(
     template_id: int,
     new_id: int,
@@ -93,14 +142,26 @@ def clone_vm(
     ip: str,
     gateway: str,
     dns: str = "",
+    disk_size: str = "",
+    cores: int = 0,
+    memory: int = 0,
     start: bool = True,
 ) -> None:
     upid = _api().nodes(_node).qemu(template_id).clone.post(newid=new_id, name=name, full=1)
     Tasks.blocking_status(_api(), upid)
 
+    if disk_size:
+        disk = _primary_disk(new_id)
+        if disk:
+            _api().nodes(_node).qemu(new_id).resize.put(disk=disk, size=disk_size)
+
     ciconfig: dict = {"ipconfig0": f"ip={ip},gw={gateway}"}
     if dns:
         ciconfig["nameserver"] = dns
+    if cores:
+        ciconfig["cores"] = cores
+    if memory:
+        ciconfig["memory"] = memory
     _api().nodes(_node).qemu(new_id).config.post(**ciconfig)
 
     if start:
