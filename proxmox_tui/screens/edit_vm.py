@@ -69,11 +69,32 @@ class EditVMScreen(ModalScreen[dict]):
     }
     """
 
+    @staticmethod
+    def _to_gb(size_str: str) -> int:
+        """Convert a Proxmox size string to GB (e.g. '4296M' -> 4, '10G' -> 10, '1T' -> 1024).
+        Returns 0 only if parsing truly fails."""
+        s = size_str.strip()
+        try:
+            if s.endswith("T"):
+                return max(1, int(float(s[:-1]) * 1024))
+            if s.endswith("G"):
+                return max(1, int(float(s[:-1])))
+            if s.endswith("M"):
+                # Use int() truncation, not round(), to never overshoot actual size
+                return max(1, int(float(s[:-1]) / 1024))
+            if s.endswith("K"):
+                return 1
+            # Raw bytes
+            return max(1, int(int(s) / 1024 ** 3))
+        except (ValueError, AttributeError):
+            return 0
+
     def __init__(self, vmid: int, name: str) -> None:
         super().__init__()
         self._vmid = vmid
         self._name = name
         self._original: dict = {}
+        self._original_disk_gb: int = 0
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -112,11 +133,15 @@ class EditVMScreen(ModalScreen[dict]):
         self._original = s
         self.query_one("#cores", Input).value = str(s["cores"])
         self.query_one("#memory", Input).value = str(s["memory"])
-        # Show disk size as plain number so user can edit it (strip trailing unit)
-        size = s["disk_size"].rstrip("BKMGT") if s["disk_size"] != "?" else ""
-        self.query_one("#disk-size", Input).placeholder = s["disk_size"] if s["disk"] else "none"
-        if size:
-            self.query_one("#disk-size", Input).value = size
+        if s["disk"] and s["disk_size"] != "?":
+            disk_gb = self._to_gb(s["disk_size"])
+            if disk_gb:
+                self._original_disk_gb = disk_gb
+                self.query_one("#disk-size", Input).value = str(disk_gb)
+            else:
+                self.query_one("#disk-size", Input).placeholder = s["disk_size"]
+        else:
+            self.query_one("#disk-size", Input).placeholder = "none"
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-cancel":
@@ -144,10 +169,8 @@ class EditVMScreen(ModalScreen[dict]):
             result["cores"] = int(cores_str)
         if memory_str and int(memory_str) != self._original.get("memory"):
             result["memory"] = int(memory_str)
-        if disk_str:
-            new_disk = f"{disk_str}G"
-            if new_disk != self._original.get("disk_size"):
-                result["disk_size"] = new_disk
+        if disk_str and int(disk_str) != self._original_disk_gb:
+            result["disk_size"] = f"{disk_str}G"
         self.dismiss(result)
 
     def action_cancel(self) -> None:
