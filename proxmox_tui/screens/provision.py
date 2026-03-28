@@ -152,7 +152,9 @@ class ProvisionScreen(Screen):
         memory_str = self.query_one("#memory", Input).value.strip()
         disk_size_str = self.query_one("#disk-size", Input).value.strip()
 
-        if sel.value is Select.BLANK:
+        try:
+            template_id = int(sel.value)
+        except (TypeError, ValueError):
             self._set_status("[red]Select a template[/]")
             return
         if not vmid_str.isdigit():
@@ -179,7 +181,7 @@ class ProvisionScreen(Screen):
 
         disk_size = f"{disk_size_str}G" if disk_size_str else ""
         self._do_clone(
-            int(sel.value), int(vmid_str), name, ip, gateway, dns,
+            template_id, int(vmid_str), name, ip, gateway, dns,
             disk_size=disk_size,
             cores=int(cores_str) if cores_str else 0,
             memory=int(memory_str) if memory_str else 0,
