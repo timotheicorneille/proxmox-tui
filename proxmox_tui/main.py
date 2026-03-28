@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 from textual.app import App, ComposeResult
+from textual.actions import SkipAction
 
 from . import api
 from .config import get_proxmox_config
@@ -28,7 +29,10 @@ class ProxmoxTUI(App):
             return
         action = f"action_cursor_{direction}" if hasattr(focused, f"action_cursor_{direction}") else f"action_scroll_{direction}"
         if hasattr(focused, action):
-            getattr(focused, action)()
+            try:
+                getattr(focused, action)()
+            except SkipAction:
+                pass
 
     def key_j(self) -> None:
         self._move_focused("down")
