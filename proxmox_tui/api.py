@@ -127,7 +127,7 @@ def update_vm(vmid: int, cores: int = 0, memory: int = 0, disk_size: str = "") -
     if memory:
         params["memory"] = memory
     if params:
-        _api().nodes(_node).qemu(vmid).config.post(**params)
+        _api().nodes(_node).qemu(vmid).config.put(**params)
     if disk_size:
         disk = _primary_disk(vmid)
         if disk is None:
@@ -155,14 +155,18 @@ def clone_vm(
         if disk:
             _api().nodes(_node).qemu(new_id).resize.put(disk=disk, size=disk_size)
 
+    hw: dict = {}
+    if cores:
+        hw["cores"] = cores
+    if memory:
+        hw["memory"] = memory
+    if hw:
+        _api().nodes(_node).qemu(new_id).config.put(**hw)
+
     ciconfig: dict = {"ipconfig0": f"ip={ip},gw={gateway}"}
     if dns:
         ciconfig["nameserver"] = dns
-    if cores:
-        ciconfig["cores"] = cores
-    if memory:
-        ciconfig["memory"] = memory
-    _api().nodes(_node).qemu(new_id).config.post(**ciconfig)
+    _api().nodes(_node).qemu(new_id).config.put(**ciconfig)
 
     if start:
         _api().nodes(_node).qemu(new_id).status.start.post()
